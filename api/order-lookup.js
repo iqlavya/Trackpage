@@ -1,26 +1,8 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // api/order-lookup.js
-// Deploy this as a Vercel Serverless Function (free)
-//
-// This is the backend that:
-//   1. Receives order_id + email from the tracking page
-//   2. Uses your app's Client ID + Client Secret to get a temporary
-//      access token from Shopify (Client Credentials Grant)
-//   3. Calls Shopify Admin API to find the order using that token
-//   4. Verifies the email matches (security)
-//   5. Returns order date, name, product title & image
-//
-// WHY THIS APPROACH:
-//   Shopify removed the old "generate a permanent token" option for
-//   new custom apps. Apps now get a Client ID + Client Secret instead.
-//   For apps you install on your OWN store, you can exchange these
-//   for an access token yourself — no OAuth redirect/login needed.
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
 
-  // Allow your Shopify store to call this
-  res.setHeader('Access-Control-Allow-Origin', 'https://YOUR-STORE.myshopify.com');
+  res.setHeader('Access-Control-Allow-Origin', 'https://medallion-9178.myshopify.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
   const { order_id, email } = req.query;
@@ -29,14 +11,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Order ID and email are required.' });
   }
 
-  // Clean up order ID — strip # signs, spaces, common prefixes
   const cleanId = order_id.replace(/[#\s]/g, '').replace(/^[A-Za-z]+-/, '');
 
-  const SHOPIFY_STORE        = process.env.SHOPIFY_STORE;        // yourstore.myshopify.com
-  const SHOPIFY_CLIENT_ID    = process.env.SHOPIFY_CLIENT_ID;     // from Dev Dashboard → Settings
-  const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET; // from Dev Dashboard → Settings
+  const SHOPIFY_STORE         = process.env.SHOPIFY_STORE;
+  const SHOPIFY_CLIENT_ID     = process.env.SHOPIFY_CLIENT_ID;
+  const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 
-  // ── STEP 1: Get a temporary access token using Client Credentials Grant ─────
+  // ── STEP 1: Get access token ─────────────────────────────────────────────────
   let accessToken;
   try {
     const tokenRes = await fetch(`https://${SHOPIFY_STORE}/admin/oauth/access_token`, {
@@ -52,8 +33,8 @@ export default async function handler(req, res) {
     const tokenData = await tokenRes.json();
 
     if (!tokenData.access_token) {
-      console.error('Token error:', tokenData);
-      return res.status(500).json({ error: 'Could not authenticate with order system. Please contact support.' });
+      console.error('Token error:', JSON.stringify(tokenData));
+      return res.status(500).json({ error: 'Could not authenticate with order system.' });
     }
 
     accessToken = tokenData.access_token;
@@ -62,7 +43,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Could not connect to order system. Please try again.' });
   }
 
-  // ── STEP 2: Use the access token to look up the order ────────────────────────
+  // ── STEP 2: Look up order ────────────────────────────────────────────────────
   let shopifyData;
   try {
     const response = await fetch(
@@ -87,29 +68,31 @@ export default async function handler(req, res) {
 
   const order = orders[0];
 
-  // ── STEP 3: Security check — verify email matches ────────────────────────────
+  // ── STEP 3: Verify email ─────────────────────────────────────────────────────
   const orderEmail = (order.email || '').toLowerCase().trim();
   if (orderEmail !== email.toLowerCase().trim()) {
     return res.status(404).json({ error: 'Order not found. Please check your order number and email.' });
   }
 
-  // ── STEP 4: Build response ────────────────────────────────────────────────────
-  const firstItem    = order.line_items?.[0];
-  const productName  = firstItem?.title || 'Watch';
+  // ── STEP 4: Get product name + FIRST image ───────────────────────────────────
+  const firstItem   = order.line_items?.[0];
+  const productName = firstItem?.title || 'Watch';
 
-  // Get product image via a second lightweight call (line item doesn't include image directly)
   let imageUrl = '';
   try {
     if (firstItem?.product_id) {
       const prodRes = await fetch(
-        `https://${SHOPIFY_STORE}/admin/api/2024-10/products/${firstItem.product_id}/images.json`,
+        `https://${SHOPIFY_STORE}/admin/api/2024-10/products/${firstItem.product_id}/images.json?limit=1`,
         { headers: { 'X-Shopify-Access-Token': accessToken } }
       );
       const prodData = await prodRes.json();
+      console.log('Image fetch response:', JSON.stringify(prodData));  // debug log
       imageUrl = prodData.images?.[0]?.src || '';
+    } else {
+      console.log('No product_id found on line item:', JSON.stringify(firstItem));
     }
   } catch (e) {
-    // Non-critical — just skip image if this fails
+    console.error('Image fetch error:', e);
   }
 
   return res.status(200).json({
