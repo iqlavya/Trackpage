@@ -1,0 +1,6 @@
+{
+  "name": "watch-order-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the watch store order tracking page"
+}

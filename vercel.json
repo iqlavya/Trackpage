@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/order-lookup.js": {
+      "maxDuration": 10
+    }
+  }
+}
