@@ -86,19 +86,59 @@ export default async function handler(req, res) {
         { headers: { 'X-Shopify-Access-Token': accessToken } }
       );
       const prodData = await prodRes.json();
-      console.log('Image fetch response:', JSON.stringify(prodData));  // debug log
       imageUrl = prodData.images?.[0]?.src || '';
-    } else {
-      console.log('No product_id found on line item:', JSON.stringify(firstItem));
     }
   } catch (e) {
     console.error('Image fetch error:', e);
   }
 
+  // ── STEP 5: Get fulfillment details (tracking info) ──────────────────────────
+  let trackingNumber  = '';
+  let trackingCompany = '';
+  let trackingUrl     = '';
+  let fulfilledAt     = '';
+
+  try {
+    const fulRes = await fetch(
+      `https://${SHOPIFY_STORE}/admin/api/2024-10/orders/${order.id}/fulfillments.json`,
+      { headers: { 'X-Shopify-Access-Token': accessToken } }
+    );
+    const fulData = await fulRes.json();
+    const fulfillments = fulData.fulfillments || [];
+
+    if (fulfillments.length > 0) {
+      const latestFulfillment = fulfillments[fulfillments.length - 1];
+      trackingNumber  = latestFulfillment.tracking_number  || '';
+      trackingCompany = latestFulfillment.tracking_company || '';
+      trackingUrl     = latestFulfillment.tracking_url     || '';
+      fulfilledAt     = latestFulfillment.created_at       || '';
+    }
+  } catch (e) {
+    console.error('Fulfillment fetch error:', e);
+  }
+
+  // ── STEP 6: Detect preorder ──────────────────────────────────────────────────
+  // Rule 1: order has PREORDER tag
+  // Rule 2: order is unfulfilled after 48 hours
+  const orderTags     = (order.tags || '').split(',').map(t => t.trim().toUpperCase());
+  const hasPreorderTag = orderTags.includes('PREORDER');
+  const orderAge      = (Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60); // hours
+  const isUnfulfilled = order.fulfillment_status !== 'fulfilled';
+  const isPreorder    = hasPreorderTag || (isUnfulfilled && orderAge >= 48);
+
+  // ── STEP 7: Return everything ────────────────────────────────────────────────
   return res.status(200).json({
-    order_name:   order.name,
-    order_date:   order.created_at,
-    product_name: productName,
-    image_url:    imageUrl
+    order_name:         order.name,
+    order_date:         order.created_at,
+    product_name:       productName,
+    image_url:          imageUrl,
+    fulfillment_status: order.fulfillment_status || 'unfulfilled',
+    cancelled_at:       order.cancelled_at       || null,
+    tags:               order.tags               || '',
+    is_preorder:        isPreorder,
+    tracking_number:    trackingNumber,
+    tracking_company:   trackingCompany,
+    tracking_url:       trackingUrl,
+    fulfilled_at:       fulfilledAt,
   });
 }
