@@ -2,7 +2,7 @@
 
 export default async function handler(req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', 'https://prabhjeetsingh1490.myshopify.com', 'https://dream-watches.com');
+  res.setHeader('Access-Control-Allow-Origin', 'https://dream-watches.com');
   
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
