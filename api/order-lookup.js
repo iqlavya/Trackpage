@@ -2,7 +2,7 @@
 
 export default async function handler(req, res) {
 
-  res.setHeader('Access-Control-Allow-Origin', 'https://medallion-9178.myshopify.com');
+  res.setHeader('Access-Control-Allow-Origin', 'prabhjeetsingh1490.myshopify.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
   const { order_id } = req.query;
